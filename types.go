@@ -28,3 +28,26 @@ func NewAccount(firstName, lastName string) *Account {
 		CreatedAt: time.Now().UTC(),
 	}
 }
+
+type Transfer struct {
+	ID    int    `json:"id"`
+	From   int64 `json:"from"`
+	To     int64 `json:"to"`
+	Amount int64 `json:"amount"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type CreateTransfer struct {
+	From   int64 `json:"from"`
+	To     int64 `json:"to"`
+	Amount int64 `json:"amount"`
+}
+
+func NewTransfer(from, to, amount int64) *Transfer {
+	return &Transfer{
+		From:   from,
+		To:     to,
+		Amount: amount,
+		CreatedAt: time.Now().UTC(),
+	}
+}
