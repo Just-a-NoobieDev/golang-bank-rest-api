@@ -2,12 +2,98 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 )
+
+type APIServer struct {
+	listenAddress string
+	database Database
+}
+
+func (s *APIServer) Start() {
+	router := mux.NewRouter()
+
+	router.HandleFunc("/account", makeHttpHandler(s.handleCreateAccounts)).Methods("POST")
+	router.HandleFunc("/account", makeHttpHandler(s.handleGetAccounts)).Methods("GET")
+	router.HandleFunc("/account/{id}", makeHttpHandler(s.handleGetAccountById)).Methods("GET")
+	router.HandleFunc("/account/{id}", makeHttpHandler(s.handleDeleteAccounts)).Methods("DELETE")
+	router.HandleFunc("/transfer", makeHttpHandler(s.handleTransfer)).Methods("POST")
+
+
+	log.Println("Starting server on port:" + s.listenAddress)
+	http.ListenAndServe(s.listenAddress, router)
+}
+
+func NewAPIServer(listenAddress string, db Database) *APIServer {
+	return &APIServer{
+		listenAddress: listenAddress, 
+		database: db,
+	}
+}
+
+func (s *APIServer) handleGetAccounts(w http.ResponseWriter, r *http.Request) error {
+	accounts, err := s.database.GetAccounts()
+	if err != nil {
+		return err
+	}
+	return WriteJSON(w, http.StatusOK, accounts)
+}
+
+func (s *APIServer) handleGetAccountById(w http.ResponseWriter, r *http.Request) error {
+	id := mux.Vars(r)
+
+	idArg, err := strconv.Atoi(id["id"])
+	
+	if err != nil {
+		return err
+	}
+
+	account, err := s.database.GetAccountById(idArg)
+	if err != nil {
+		return err
+	}
+	return WriteJSON(w, http.StatusOK, account)
+}
+
+func (s *APIServer) handleCreateAccounts(w http.ResponseWriter, r *http.Request) error {
+	req := new(CreateAccount)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		return err
+	}
+
+	newAccount := NewAccount(req.FirstName, req.LastName)
+
+	if err := s.database.CreateAccount(newAccount); err != nil {
+		return err
+	}
+
+	return WriteJSON(w, http.StatusCreated, newAccount)
+}
+
+func (s *APIServer) handleDeleteAccounts(w http.ResponseWriter, r *http.Request) error {
+	
+	id := mux.Vars(r)
+
+	idArg, err := strconv.Atoi(id["id"])
+
+	if err != nil {
+		return err
+	}
+
+	if err := s.database.DeleteAccount(idArg); err != nil {
+		return err
+	}
+
+	return WriteJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *APIServer) handleTransfer(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
 
 func WriteJSON(w http.ResponseWriter, status int, data any) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -27,54 +113,4 @@ func makeHttpHandler(fn apiFunc) http.HandlerFunc {
 			WriteJSON(w, http.StatusBadRequest, ApiError{Error: err.Error()})
 		}
 	}
-}
-
-type APIServer struct {
-	listenAddress string
-}
-
-func (s *APIServer) Start() {
-	router := mux.NewRouter()
-
-	router.HandleFunc("/account", makeHttpHandler(s.handleAccount))
-	router.HandleFunc("/account/{id}", makeHttpHandler(s.handleGetAccounts))
-
-
-	log.Println("Starting server on port:" + s.listenAddress)
-	http.ListenAndServe(s.listenAddress, router)
-}
-
-func NewAPIServer(listenAddress string) *APIServer {
-	return &APIServer{listenAddress: listenAddress}
-}
-
-func (s *APIServer) handleAccount(w http.ResponseWriter, r *http.Request) error {
-	if r.Method == "GET" {
-		return s.handleGetAccounts(w, r)
-	} else if r.Method == "POST" {
-		return s.handleCreateAccounts(w, r)
-	} else if r.Method == "DELETE" {
-		return s.handleDeleteAccounts(w, r)
-	} 
-	
-	return fmt.Errorf("unsupported method %s", r.Method)
-}
-
-func (s *APIServer) handleGetAccounts(w http.ResponseWriter, r *http.Request) error {
-	id := mux.Vars(r)
-	//db.get
-	fmt.Println(id)
-	return WriteJSON(w, http.StatusOK, &Account{})
-}
-
-func (s *APIServer) handleCreateAccounts(w http.ResponseWriter, r *http.Request) error {
-	return nil
-}
-
-func (s *APIServer) handleDeleteAccounts(w http.ResponseWriter, r *http.Request) error {
-	return nil
-}
-
-func (s *APIServer) handleTransfer(w http.ResponseWriter, r *http.Request) error {
-	return nil
 }
