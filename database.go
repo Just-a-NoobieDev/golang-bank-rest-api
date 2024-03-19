@@ -15,6 +15,8 @@ type Database interface {
 	GetTransfers() ([]*Transfer, error)
 	GetTransferByFrom(int) (*Transfer, error)
 	GetTransferByTo(int) (*Transfer, error)
+	UpdateAmountOfAccount(int, int) error
+	GetAccountByAccountNumber(int) (*Account, error)
 }
 
 type PosgresDatabase struct {
@@ -70,8 +72,8 @@ func (p *PosgresDatabase) CreateAccountTable() error {
 func (p *PosgresDatabase) CreateTransferTable() error {
 	query := `CREATE TABLE IF NOT EXISTS transfers (
 		id SERIAL PRIMARY KEY NOT NULL, 
-		from_account SERIAL REFERENCES accounts(account_number) ON DELETE CASCADE, 
-		to_account SERIAL REFERENCES accounts(account_number) ON DELETE CASCADE, 
+		from_account SERIAL NOT NULL, 
+		to_account SERIAL NOT NULL, 
 		amount SERIAL,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);`
@@ -94,6 +96,24 @@ func (p *PosgresDatabase) CreateAccount(a *Account) error {
 	err = stmt.QueryRow(a.FirstName, a.LastName, a.Number, a.Balance, a.CreatedAt).Scan(&a.ID)
 	return err
 
+}
+
+func (p *PosgresDatabase) UpdateAmountOfAccount(id int, amount int) error {
+	query := `UPDATE accounts SET balance = $1 WHERE account_number = $2;`
+
+	stmt, err := p.db.Prepare(query)
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	_, err = stmt.Exec(amount, id)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (p *PosgresDatabase) DeleteAccount(id int) error {
@@ -153,6 +173,35 @@ func (p *PosgresDatabase) GetAccounts() ([]*Account, error) {
 func (p *PosgresDatabase) GetAccountById(id int) (*Account, error) {
 	
 	query := `SELECT * FROM accounts WHERE id = $1;`
+
+	stmt, err := p.db.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+
+	defer stmt.Close()
+
+	account := &Account{}
+
+	err = stmt.QueryRow(id).Scan(
+		&account.ID,
+		&account.FirstName,
+		&account.LastName,
+		&account.Number,
+		&account.Balance,
+		&account.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return account, nil
+
+}
+
+func (p *PosgresDatabase) GetAccountByAccountNumber(id int) (*Account, error) {
+	
+	query := `SELECT * FROM accounts WHERE account_number = $1;`
 
 	stmt, err := p.db.Prepare(query)
 	if err != nil {

@@ -17,11 +17,46 @@ func (s *APIServer) handleTransfer(w http.ResponseWriter, r *http.Request) error
 
 	newTransfer := NewTransfer(req.From, req.To, req.Amount)
 
+	account, err := s.database.GetAccountByAccountNumber(int(req.From))
+	if err != nil {
+		return WriteJSON(w, http.StatusBadRequest, ApiError{Error: "Account not found."})
+	}
+
+	toAccount, err := s.database.GetAccountByAccountNumber(int(req.To))
+	if err != nil {
+		return WriteJSON(w, http.StatusBadRequest, ApiError{Error: "Account not found."})
+	}
+
+	if account.Balance < int64(req.Amount) {
+		return WriteJSON(w, http.StatusBadRequest, ApiError{Error: "Insufficient funds."})
+	}
+
 	if err := s.database.CreateTransfer(newTransfer); err != nil {
 		return WriteJSON(w, http.StatusBadRequest, ApiError{Error: "Something went wrong creating your transfer. Please Try again later." + err.Error()})
 	}
 
-	return WriteJSON(w, http.StatusCreated, newTransfer)
+	newBalance := account.Balance - int64(req.Amount)
+
+	toNewBalance := toAccount.Balance + int64(req.Amount)
+
+	if err := s.database.UpdateAmountOfAccount(int(req.From), int(newBalance)); err != nil {
+		return WriteJSON(w, http.StatusBadRequest, ApiError{Error: "Something went wrong updating your balance. Please Try again later." + err.Error()})
+	}
+
+	if err := s.database.UpdateAmountOfAccount(int(req.To), int(toNewBalance)); err != nil {
+		return WriteJSON(w, http.StatusBadRequest, ApiError{Error: "Something went wrong updating your balance. Please Try again later." + err.Error()})
+	}
+
+	response := map[string]interface{}{
+		"transfer_id":   newTransfer.ID,
+		"sender_name":   account.FirstName + " " + account.LastName,
+		"account_number": req.From,
+		"receipient_number":    req.To,
+		"amount":        req.Amount,
+		"new_balance":     account.Balance - int64(req.Amount),
+	}
+
+	return WriteJSON(w, http.StatusCreated, response)
 }
 
 func (s *APIServer) handleGetTransfers(w http.ResponseWriter, r *http.Request) error {
